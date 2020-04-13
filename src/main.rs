@@ -11,7 +11,7 @@ struct State {
     animation_system: AnimationSystem,
 }
 
-#[derive(Component, Debug, PartialEq)]
+#[derive(Component, Debug, PartialEq, Clone)]
 #[storage(VecStorage)]
 struct Image {
     image: Arc<graphics::Image>,
@@ -212,22 +212,28 @@ fn main() {
     world.register::<Animation>();
 
     // Background
-    world
-        .create_entity()
-        .with(Position {
-            position: nalgebra::Point2::new(0.0, 0.0),
-        })
-        .with(Image::new(ctx, "/background.png"))
-        .build();
+    let bg_image = Image::new(ctx, "/background.png");
+    for n in 0..2 {
+        world
+            .create_entity()
+            .with(Position {
+                position: nalgebra::Point2::new(760.0 * n as f32, 0.0),
+            })
+            .with(bg_image.clone())
+            .build();
+    }
 
     // Floor
-    world
-        .create_entity()
-        .with(Position {
-            position: nalgebra::Point2::new(0.0, 520.0),
-        })
-        .with(Image::new(ctx, "/floor.png"))
-        .build();
+    let floor_image = Image::new(ctx, "/floor.png");
+    for n in 0..4 {
+        world
+            .create_entity()
+            .with(Position {
+                position: nalgebra::Point2::new(320.0 * n as f32, 520.0),
+            })
+            .with(floor_image.clone())
+            .build();
+    }
 
     // The bird
     world
