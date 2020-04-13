@@ -1,20 +1,52 @@
 use ggez::*;
+use specs::*;
+use specs_derive::*;
+use std::sync::Arc;
 
-struct State {}
+struct State {
+    specs_world: World,
+}
+
+#[derive(Component, Debug, PartialEq)]
+#[storage(VecStorage)]
+struct Image {
+    image: Arc<graphics::Image>,
+}
+
+#[derive(Component, Debug, PartialEq)]
+#[storage(VecStorage)]
+struct Position {
+    position: nalgebra::Point2<f32>,
+}
 
 impl ggez::event::EventHandler for State {
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
         Ok(())
     }
 
-    fn draw(&mut self, _ctx: &mut Context) -> GameResult<()> {
+    fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
+        graphics::clear(ctx, graphics::BLACK);
+        let positions = self.specs_world.read_storage::<Position>();
+        let images = self.specs_world.read_storage::<Image>();
+
+        for (p, i) in (&positions, &images).join() {
+            graphics::draw(
+                ctx,
+                &*i.image,
+                graphics::DrawParam::default().dest(p.position),
+            )
+            .unwrap_or_else(|err| println!("draw error {:?}", err));
+        }
+
+        graphics::present(ctx)?;
+
+        timer::yield_now();
         Ok(())
     }
 }
 
 fn main() {
     println!("Rusty Bird");
-    let state = &mut State {};
 
     let mut conf = conf::Conf::new();
     let win_setup = conf::WindowSetup {
@@ -32,6 +64,28 @@ fn main() {
         .conf(conf)
         .build()
         .unwrap();
+
+    let mut world= World::new();
+    world.register::<Position>();
+    world.register::<Image>();
+
+    let test: [u8; 1600] = [128; 1600];
+    let char_image = graphics::Image::from_rgba8(ctx, 20, 20, &test).unwrap();
+    let character = Arc::new(char_image);
+
+    world
+        .create_entity()
+        .with(Position {
+            position: nalgebra::Point2::new(100.0, 200.0),
+        })
+        .with(Image {
+            image: character.clone(),
+        })
+        .build();
+
+    let state = &mut State {
+        specs_world: world,
+    };
 
     event::run(ctx, event_loop, state).unwrap();
 }
