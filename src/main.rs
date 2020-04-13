@@ -2,6 +2,7 @@ use ggez::event::{self, KeyCode, KeyMods};
 use ggez::*;
 use specs::*;
 use specs_derive::*;
+use std::path;
 use std::sync::Arc;
 
 const GRAVITY: f32 = 0.3;
@@ -305,6 +306,7 @@ fn main() {
     let (ref mut ctx, ref mut event_loop) =
         ContextBuilder::new("rusty_bird", "Luis de Bethencourt")
             .conf(conf)
+            .add_resource_path(path::PathBuf::from("./assets"))
             .build()
             .unwrap();
 

@@ -1,7 +1,16 @@
-A Flabby Bird game clone written in Rust
+# A Flabby Bird game clone written in Rust
 
-For educational purposes
-To use the assets copy the contents of the `assets/` folder to `target/debug/resources`.
+For educational purposes.
+
+To run just do:
+```
+$ cargo run
+```
 
 Assets from:
-    https://opengameart.org/content/free-game-asset-grumpy-flappy-bird-sprite-sheets
+* [https://https://jesse-m.itch.io/jungle-pack](https://https://jesse-m.itch.io/jungle-pack)
+* [https://opengameart.org/content/free-game-asset-grumpy-flappy-bird-sprite-sheets](https://opengameart.org/content/free-game-asset-grumpy-flappy-bird-sprite-sheets)
+
+Big thank you to Jesse Munguia (@Jsf23Art) and Bevouliin (@bevouliin) for
+making awesome free art.
+Please follow and support them.
