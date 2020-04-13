@@ -197,8 +197,8 @@ fn main() {
         srgb: true,
     };
     conf.window_setup = win_setup;
-    conf.window_mode.height = 720.0;
-    conf.window_mode.width = 1280.0;
+    conf.window_mode.height = 600.0;
+    conf.window_mode.width = 1024.0;
 
     let (ref mut ctx, ref mut event_loop) =
         ContextBuilder::new("rusty_bird", "Luis de Bethencourt")
@@ -218,6 +218,15 @@ fn main() {
             position: nalgebra::Point2::new(0.0, 0.0),
         })
         .with(Image::new(ctx, "/background.png"))
+        .build();
+
+    // Floor
+    world
+        .create_entity()
+        .with(Position {
+            position: nalgebra::Point2::new(0.0, 520.0),
+        })
+        .with(Image::new(ctx, "/floor.png"))
         .build();
 
     // The bird
