@@ -7,6 +7,7 @@ use std::sync::Arc;
 struct State {
     specs_world: World,
     player_input: Direction,
+    movement_system: MovementSystem,
 }
 
 #[derive(Component, Debug, PartialEq)]
@@ -32,8 +33,25 @@ impl Direction {
     }
 }
 
+struct MovementSystem;
+impl<'a> System<'a> for MovementSystem {
+    type SystemData = (Read<'a, Direction>, WriteStorage<'a, Position>);
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (dir, mut pos) = data;
+
+        for pos in (&mut pos).join() {
+            if dir.jump {
+                pos.position.y -= 10.0;
+            }
+        }
+    }
+}
+
 impl ggez::event::EventHandler for State {
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
+        self.movement_system.run_now(&self.specs_world);
+
         Ok(())
     }
 
@@ -75,12 +93,18 @@ impl ggez::event::EventHandler for State {
                 _ => (),
             }
         }
+
+        let mut input_state = self.specs_world.write_resource::<Direction>();
+        *input_state = self.player_input;
     }
 
     fn key_up_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods) {
         if let KeyCode::Space = keycode {
             self.player_input.jump = false;
         }
+
+        let mut input_state = self.specs_world.write_resource::<Direction>();
+        *input_state = self.player_input;
     }
 }
 
@@ -129,9 +153,12 @@ fn main() {
     let player_input_world = Direction::new();
     world.insert(player_input_world);
 
+    let update_pos = MovementSystem;
+
     let state = &mut State {
         specs_world: world,
         player_input,
+        movement_system: update_pos,
     };
 
     event::run(ctx, event_loop, state).unwrap();
