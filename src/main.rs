@@ -11,6 +11,7 @@ struct State {
     player_input: Direction,
     movement_system: MovementSystem,
     animation_system: AnimationSystem,
+    collision_system: CollisionSystem,
 }
 
 #[derive(Component, Debug, PartialEq, Clone)]
@@ -105,10 +106,11 @@ impl<'a> System<'a> for MovementSystem {
         ReadStorage<'a, Animation>,
         ReadStorage<'a, BackgroundTag>,
         ReadStorage<'a, ObstacleTag>,
+        WriteStorage<'a, CollisionBox>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut dir, mut pos, anim, bg, obs) = data;
+        let (mut dir, mut pos, anim, bg, obs, mut coll) = data;
 
         for (pos, _) in (&mut pos, &anim).join() {
             if dir.jump && dir.release {
@@ -146,6 +148,12 @@ impl<'a> System<'a> for MovementSystem {
                 pos.position.x = 1024.0;
             }
         }
+
+        for (pos, coll_box) in (&mut pos, &mut coll).join() {
+            // if an entity has an updated position, we also need to update it's collision box
+            coll_box.origin.x = pos.position.x;
+            coll_box.origin.y = pos.position.y;
+        }
     }
 }
 
@@ -165,6 +173,42 @@ impl<'a> System<'a> for AnimationSystem {
     }
 }
 
+#[derive(Component, Copy, Clone, Debug, PartialEq)]
+#[storage(VecStorage)]
+struct CollisionBox {
+    origin: nalgebra::Point2<f32>,
+    height: f32,
+    width: f32,
+}
+
+struct CollisionSystem;
+
+impl<'a> System<'a> for CollisionSystem {
+    type SystemData = (
+        ReadStorage<'a, Position>,
+        ReadStorage<'a, CollisionBox>,
+        ReadStorage<'a, Animation>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (pos, coll_box, anim) = data;
+
+        // Find the player collision box
+        for (player_box, _) in (&coll_box, &anim).join() {
+            // Now check all entities with a collision box that aren't player controlled
+            for (_, coll_box, _) in (&pos, &coll_box, !&anim).join() {
+                if player_box.origin.x < coll_box.origin.x + coll_box.width
+                    && player_box.origin.x + player_box.width > coll_box.origin.x
+                    && player_box.origin.y < coll_box.origin.y + coll_box.height
+                    && player_box.origin.y + player_box.height > coll_box.origin.y
+                {
+                    println!("Collision detected");
+                }
+            }
+        }
+    }
+}
+
 impl ggez::event::EventHandler for State {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const ANIMATION_DESIRED_FPS: u32 = 15;
@@ -174,6 +218,7 @@ impl ggez::event::EventHandler for State {
         }
 
         self.movement_system.run_now(&self.specs_world);
+        self.collision_system.run_now(&self.specs_world);
 
         Ok(())
     }
@@ -269,6 +314,7 @@ fn main() {
     world.register::<Animation>();
     world.register::<BackgroundTag>();
     world.register::<ObstacleTag>();
+    world.register::<CollisionBox>();
 
     // Background
     let bg_image = Image::new(ctx, "/background.png");
@@ -311,10 +357,12 @@ fn main() {
     // Obstacle pipe
     let pipe_img = Image::new(ctx, "/bottom_pipe.png");
     for n in 0..2 {
+        let pos_x = (500.0 * n as f32) + 900.0;
+        let pos_y = 360.0;
         world
             .create_entity()
             .with(Position {
-                position: nalgebra::Point2::new((500.0 * n as f32) + 900.0, 360.0),
+                position: nalgebra::Point2::new(pos_x, pos_y),
                 speed: nalgebra::Point2::new(0.0, 0.0),
             })
             .with(pipe_img.clone())
@@ -324,10 +372,17 @@ fn main() {
                 num_copies: 1,
             })
             .with(ObstacleTag)
+            .with(CollisionBox {
+                origin: nalgebra::Point2::new(pos_x, pos_y),
+                height: 240.0,
+                width: 64.0,
+            })
             .build();
     }
 
     // The bird
+    let bird_height = 72.0;
+    let bird_width = 61.0;
     world
         .create_entity()
         .with(Position {
@@ -335,6 +390,11 @@ fn main() {
             speed: nalgebra::Point2::new(0.0, 0.0),
         })
         .with(Animation::from_frames(ctx, 4, "/player"))
+        .with(CollisionBox {
+            origin: nalgebra::Point2::new(100.0, 200.0),
+            height: bird_height,
+            width: bird_width,
+        })
         .build();
 
     let player_input = Direction::new();
@@ -343,12 +403,14 @@ fn main() {
 
     let update_pos = MovementSystem;
     let update_animation = AnimationSystem;
+    let collision_system = CollisionSystem;
 
     let state = &mut State {
         specs_world: world,
         player_input,
         movement_system: update_pos,
         animation_system: update_animation,
+        collision_system,
     };
 
     event::run(ctx, event_loop, state).unwrap();
