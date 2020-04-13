@@ -69,8 +69,12 @@ fn main() {
     world.register::<Position>();
     world.register::<Image>();
 
-    let test: [u8; 1600] = [128; 1600];
-    let char_image = graphics::Image::from_rgba8(ctx, 20, 20, &test).unwrap();
+    let char_image = match graphics::Image::new(ctx, "/player1.png") {
+        Ok(img) => img,
+        Err(e) => {
+            panic!("Error: {}", e);
+        }
+    };
     let character = Arc::new(char_image);
 
     world
