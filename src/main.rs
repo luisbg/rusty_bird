@@ -1,3 +1,4 @@
+use ggez::event::{self, KeyCode, KeyMods};
 use ggez::*;
 use specs::*;
 use specs_derive::*;
@@ -5,6 +6,7 @@ use std::sync::Arc;
 
 struct State {
     specs_world: World,
+    player_input: Direction,
 }
 
 #[derive(Component, Debug, PartialEq)]
@@ -17,6 +19,17 @@ struct Image {
 #[storage(VecStorage)]
 struct Position {
     position: nalgebra::Point2<f32>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct Direction {
+    jump: bool,
+}
+
+impl Direction {
+    fn new() -> Self {
+        Direction { jump: false }
+    }
 }
 
 impl ggez::event::EventHandler for State {
@@ -42,6 +55,32 @@ impl ggez::event::EventHandler for State {
 
         timer::yield_now();
         Ok(())
+    }
+
+    fn key_down_event(
+        &mut self,
+        ctx: &mut Context,
+        keycode: KeyCode,
+        _keymod: KeyMods,
+        repeat: bool,
+    ) {
+        if !repeat {
+            match keycode {
+                KeyCode::Space => {
+                    self.player_input.jump = true;
+                }
+                KeyCode::Escape => {
+                    event::quit(ctx);
+                }
+                _ => (),
+            }
+        }
+    }
+
+    fn key_up_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods) {
+        if let KeyCode::Space = keycode {
+            self.player_input.jump = false;
+        }
     }
 }
 
@@ -86,7 +125,14 @@ fn main() {
         .with(Image { image: character })
         .build();
 
-    let state = &mut State { specs_world: world };
+    let player_input = Direction::new();
+    let player_input_world = Direction::new();
+    world.insert(player_input_world);
+
+    let state = &mut State {
+        specs_world: world,
+        player_input,
+    };
 
     event::run(ctx, event_loop, state).unwrap();
 }
