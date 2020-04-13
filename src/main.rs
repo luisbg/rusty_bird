@@ -85,16 +85,25 @@ impl Animation {
     }
 }
 
+#[derive(Component)]
+#[storage(VecStorage)]
+struct BackgroundTag {
+    velocity: f32,
+    width: f32,
+    num_copies: u32,
+}
+
 struct MovementSystem;
 impl<'a> System<'a> for MovementSystem {
     type SystemData = (
         Write<'a, Direction>,
         WriteStorage<'a, Position>,
-        ReadStorage<'a, Animation>
+        ReadStorage<'a, Animation>,
+        ReadStorage<'a, BackgroundTag>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut dir, mut pos, anim) = data;
+        let (mut dir, mut pos, anim, bg) = data;
 
         for (pos, _) in (&mut pos, &anim).join() {
             if dir.jump && dir.release {
@@ -114,6 +123,14 @@ impl<'a> System<'a> for MovementSystem {
             } else if pos.position.y > 460.0 {
                 pos.position.y = 460.0;
                 pos.speed.y = 0.0;
+            }
+        }
+
+        for (pos, bg) in (&mut pos, &bg).join() {
+            pos.position.x -= bg.velocity;
+
+            if pos.position.x < (bg.width * -1.0) {
+                pos.position.x += bg.width * bg.num_copies as f32;
             }
         }
     }
@@ -237,15 +254,22 @@ fn main() {
     world.register::<Position>();
     world.register::<Image>();
     world.register::<Animation>();
+    world.register::<BackgroundTag>();
 
     // Background
     let bg_image = Image::new(ctx, "/background.png");
-    for n in 0..2 {
+    let bg_copies = 3;
+    for n in 0..bg_copies {
         world
             .create_entity()
             .with(Position {
                 position: nalgebra::Point2::new(760.0 * n as f32, 0.0),
                 speed: nalgebra::Point2::new(0.0, 0.0),
+            })
+            .with(BackgroundTag {
+                velocity: 4.0,
+                width: 760.0,
+                num_copies: bg_copies,
             })
             .with(bg_image.clone())
             .build();
@@ -253,12 +277,18 @@ fn main() {
 
     // Floor
     let floor_image = Image::new(ctx, "/floor.png");
-    for n in 0..4 {
+    let floor_copies = 5;
+    for n in 0..floor_copies {
         world
             .create_entity()
             .with(Position {
                 position: nalgebra::Point2::new(320.0 * n as f32, 520.0),
                 speed: nalgebra::Point2::new(0.0, 0.0),
+            })
+            .with(BackgroundTag {
+                velocity: 4.0,
+                width: 320.0,
+                num_copies: floor_copies,
             })
             .with(floor_image.clone())
             .build();
