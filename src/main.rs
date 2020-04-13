@@ -17,6 +17,21 @@ struct Image {
     image: Arc<graphics::Image>,
 }
 
+impl Image {
+    pub fn new(ctx: &mut Context, path: &str) -> Self {
+        let new_image = match graphics::Image::new(ctx, path) {
+            Ok(img) => img,
+            Err(e) => {
+                panic!("Error: {}", e);
+            }
+        };
+
+        Image {
+            image: Arc::new(new_image),
+        }
+    }
+}
+
 #[derive(Component, Debug, PartialEq)]
 #[storage(VecStorage)]
 struct Position {
@@ -195,6 +210,15 @@ fn main() {
     world.register::<Position>();
     world.register::<Image>();
     world.register::<Animation>();
+
+    // Background
+    world
+        .create_entity()
+        .with(Position {
+            position: nalgebra::Point2::new(0.0, 0.0),
+        })
+        .with(Image::new(ctx, "/background.png"))
+        .build();
 
     // The bird
     world
