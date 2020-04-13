@@ -4,6 +4,8 @@ use specs::*;
 use specs_derive::*;
 use std::sync::Arc;
 
+const GRAVITY: f32 = 0.3;
+
 struct State {
     specs_world: World,
     player_input: Direction,
@@ -36,16 +38,21 @@ impl Image {
 #[storage(VecStorage)]
 struct Position {
     position: nalgebra::Point2<f32>,
+    speed: nalgebra::Point2<f32>,
 }
 
 #[derive(Clone, Copy, Default)]
 struct Direction {
     jump: bool,
+    release: bool,
 }
 
 impl Direction {
     fn new() -> Self {
-        Direction { jump: false }
+        Direction {
+            jump: false,
+            release: true,
+        }
     }
 }
 
@@ -81,17 +88,32 @@ impl Animation {
 struct MovementSystem;
 impl<'a> System<'a> for MovementSystem {
     type SystemData = (
-        Read<'a, Direction>,
+        Write<'a, Direction>,
         WriteStorage<'a, Position>,
         ReadStorage<'a, Animation>
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (dir, mut pos, anim) = data;
+        let (mut dir, mut pos, anim) = data;
 
         for (pos, _) in (&mut pos, &anim).join() {
-            if dir.jump {
-                pos.position.y -= 10.0;
+            if dir.jump && dir.release {
+                if pos.speed.y > -10.0 {
+                    pos.speed.y -= 10.0;
+                }
+                dir.jump = false;
+            } else if pos.speed.y < 6.0 {
+                pos.speed.y += GRAVITY;
+            }
+
+            pos.position.y += pos.speed.y;
+
+            if pos.position.y < 0.0 {
+                pos.position.y = 0.0;
+                pos.speed.y = 0.0;
+            } else if pos.position.y > 460.0 {
+                pos.position.y = 460.0;
+                pos.speed.y = 0.0;
             }
         }
     }
@@ -167,6 +189,7 @@ impl ggez::event::EventHandler for State {
             match keycode {
                 KeyCode::Space => {
                     self.player_input.jump = true;
+                    self.player_input.release = false;
                 }
                 KeyCode::Escape => {
                     event::quit(ctx);
@@ -181,7 +204,7 @@ impl ggez::event::EventHandler for State {
 
     fn key_up_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods) {
         if let KeyCode::Space = keycode {
-            self.player_input.jump = false;
+            self.player_input.release = true;
         }
 
         let mut input_state = self.specs_world.write_resource::<Direction>();
@@ -222,6 +245,7 @@ fn main() {
             .create_entity()
             .with(Position {
                 position: nalgebra::Point2::new(760.0 * n as f32, 0.0),
+                speed: nalgebra::Point2::new(0.0, 0.0),
             })
             .with(bg_image.clone())
             .build();
@@ -234,6 +258,7 @@ fn main() {
             .create_entity()
             .with(Position {
                 position: nalgebra::Point2::new(320.0 * n as f32, 520.0),
+                speed: nalgebra::Point2::new(0.0, 0.0),
             })
             .with(floor_image.clone())
             .build();
@@ -244,6 +269,7 @@ fn main() {
         .create_entity()
         .with(Position {
             position: nalgebra::Point2::new(100.0, 200.0),
+            speed: nalgebra::Point2::new(0.0, 0.0),
         })
         .with(Animation::from_frames(ctx, 4, "/player"))
         .build();
