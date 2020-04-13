@@ -80,12 +80,16 @@ impl Animation {
 
 struct MovementSystem;
 impl<'a> System<'a> for MovementSystem {
-    type SystemData = (Read<'a, Direction>, WriteStorage<'a, Position>);
+    type SystemData = (
+        Read<'a, Direction>,
+        WriteStorage<'a, Position>,
+        ReadStorage<'a, Animation>
+    );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (dir, mut pos) = data;
+        let (dir, mut pos, anim) = data;
 
-        for pos in (&mut pos).join() {
+        for (pos, _) in (&mut pos, &anim).join() {
             if dir.jump {
                 pos.position.y -= 10.0;
             }
