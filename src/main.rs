@@ -60,12 +60,13 @@ fn main() {
     conf.window_mode.height = 720.0;
     conf.window_mode.width = 1280.0;
 
-    let (ref mut ctx, ref mut event_loop) = ContextBuilder::new("rusty_bird", "Luis de Bethencourt")
-        .conf(conf)
-        .build()
-        .unwrap();
+    let (ref mut ctx, ref mut event_loop) =
+        ContextBuilder::new("rusty_bird", "Luis de Bethencourt")
+            .conf(conf)
+            .build()
+            .unwrap();
 
-    let mut world= World::new();
+    let mut world = World::new();
     world.register::<Position>();
     world.register::<Image>();
 
@@ -82,14 +83,10 @@ fn main() {
         .with(Position {
             position: nalgebra::Point2::new(100.0, 200.0),
         })
-        .with(Image {
-            image: character.clone(),
-        })
+        .with(Image { image: character })
         .build();
 
-    let state = &mut State {
-        specs_world: world,
-    };
+    let state = &mut State { specs_world: world };
 
     event::run(ctx, event_loop, state).unwrap();
 }
