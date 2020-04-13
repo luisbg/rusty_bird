@@ -93,6 +93,10 @@ struct BackgroundTag {
     num_copies: u32,
 }
 
+#[derive(Component, Default)]
+#[storage(NullStorage)]
+struct ObstacleTag;
+
 struct MovementSystem;
 impl<'a> System<'a> for MovementSystem {
     type SystemData = (
@@ -100,10 +104,11 @@ impl<'a> System<'a> for MovementSystem {
         WriteStorage<'a, Position>,
         ReadStorage<'a, Animation>,
         ReadStorage<'a, BackgroundTag>,
+        ReadStorage<'a, ObstacleTag>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut dir, mut pos, anim, bg) = data;
+        let (mut dir, mut pos, anim, bg, obs) = data;
 
         for (pos, _) in (&mut pos, &anim).join() {
             if dir.jump && dir.release {
@@ -126,11 +131,19 @@ impl<'a> System<'a> for MovementSystem {
             }
         }
 
-        for (pos, bg) in (&mut pos, &bg).join() {
+        for (pos, bg, _) in (&mut pos, &bg, !&obs).join() {
             pos.position.x -= bg.velocity;
 
             if pos.position.x < (bg.width * -1.0) {
                 pos.position.x += bg.width * bg.num_copies as f32;
+            }
+        }
+
+        for (pos, bg, _) in (&mut pos, &bg, &obs).join() {
+            pos.position.x -= bg.velocity;
+
+            if pos.position.x < (bg.width * -1.0) {
+                pos.position.x = 1024.0;
             }
         }
     }
@@ -255,6 +268,7 @@ fn main() {
     world.register::<Image>();
     world.register::<Animation>();
     world.register::<BackgroundTag>();
+    world.register::<ObstacleTag>();
 
     // Background
     let bg_image = Image::new(ctx, "/background.png");
@@ -291,6 +305,25 @@ fn main() {
                 num_copies: floor_copies,
             })
             .with(floor_image.clone())
+            .build();
+    }
+
+    // Obstacle pipe
+    let pipe_img = Image::new(ctx, "/bottom_pipe.png");
+    for n in 0..2 {
+        world
+            .create_entity()
+            .with(Position {
+                position: nalgebra::Point2::new((500.0 * n as f32) + 900.0, 360.0),
+                speed: nalgebra::Point2::new(0.0, 0.0),
+            })
+            .with(pipe_img.clone())
+            .with(BackgroundTag {
+                velocity: 4.0,
+                width: 64.0,
+                num_copies: 1,
+            })
+            .with(ObstacleTag)
             .build();
     }
 
