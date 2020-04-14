@@ -225,7 +225,7 @@ impl ggez::event::EventHandler for State {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-        graphics::clear(ctx, graphics::BLACK);
+        graphics::clear(ctx, graphics::Color::new(0.1, 0.1, 0.1, 1.0));
         let positions = self.specs_world.read_storage::<Position>();
         let images = self.specs_world.read_storage::<Image>();
         let animations = self.specs_world.read_storage::<Animation>();
@@ -319,22 +319,25 @@ fn main() {
     world.register::<CollisionBox>();
 
     // Background
-    let bg_image = Image::new(ctx, "/background.png");
     let bg_copies = 3;
-    for n in 0..bg_copies {
-        world
-            .create_entity()
-            .with(Position {
-                position: nalgebra::Point2::new(760.0 * n as f32, 0.0),
-                speed: nalgebra::Point2::new(0.0, 0.0),
-            })
-            .with(BackgroundTag {
-                velocity: 4.0,
-                width: 760.0,
-                num_copies: bg_copies,
-            })
-            .with(bg_image.clone())
-            .build();
+    for level in 1..3 {
+        let bg_image = Image::new(ctx, format!("/background{}.png", level).as_str());
+
+        for n in 0..bg_copies {
+            world
+                .create_entity()
+                .with(Position {
+                    position: nalgebra::Point2::new(760.0 * n as f32, 0.0),
+                    speed: nalgebra::Point2::new(0.0, 0.0),
+                })
+                .with(BackgroundTag {
+                    velocity: 1.0 + level as f32,
+                    width: 760.0,
+                    num_copies: bg_copies,
+                })
+                .with(bg_image.clone())
+                .build();
+        }
     }
 
     // Floor
