@@ -7,6 +7,17 @@ use std::sync::Arc;
 
 const GRAVITY: f32 = 0.3;
 
+#[derive(Default)]
+pub struct Game {
+    playing: bool,
+}
+
+impl Game {
+    pub fn new() -> Self {
+        Game { playing: true }
+    }
+}
+
 struct State {
     specs_world: World,
     player_input: Direction,
@@ -189,11 +200,13 @@ impl<'a> System<'a> for CollisionSystem {
         ReadStorage<'a, Position>,
         ReadStorage<'a, CollisionBox>,
         ReadStorage<'a, Animation>,
+        Write<'a, Game>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (pos, coll_box, anim) = data;
+        let (pos, coll_box, anim, mut game) = data;
 
+        let mut collided = false;
         // Find the player collision box
         for (player_box, _) in (&coll_box, &anim).join() {
             // Now check all entities with a collision box that aren't player controlled
@@ -203,15 +216,25 @@ impl<'a> System<'a> for CollisionSystem {
                     && player_box.origin.y < coll_box.origin.y + coll_box.height
                     && player_box.origin.y + player_box.height > coll_box.origin.y
                 {
-                    println!("Collision detected");
+                    collided = true;
                 }
             }
+        }
+
+        if collided {
+            game.playing = false;
         }
     }
 }
 
 impl ggez::event::EventHandler for State {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
+        let game = self.specs_world.read_resource::<Game>();
+        if !game.playing {
+            return Ok(());
+        }
+        drop(game);
+
         const ANIMATION_DESIRED_FPS: u32 = 15;
 
         while timer::check_update_time(ctx, ANIMATION_DESIRED_FPS) {
@@ -402,9 +425,11 @@ fn main() {
         })
         .build();
 
+    let game = Game::new();
     let player_input = Direction::new();
     let player_input_world = Direction::new();
     world.insert(player_input_world);
+    world.insert(game);
 
     let update_pos = MovementSystem;
     let update_animation = AnimationSystem;
