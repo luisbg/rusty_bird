@@ -24,6 +24,7 @@ struct State {
     movement_system: MovementSystem,
     animation_system: AnimationSystem,
     collision_system: CollisionSystem,
+    text: graphics::Text,
 }
 
 #[derive(Component, Debug, PartialEq, Clone)]
@@ -252,6 +253,7 @@ impl ggez::event::EventHandler for State {
         let positions = self.specs_world.read_storage::<Position>();
         let images = self.specs_world.read_storage::<Image>();
         let animations = self.specs_world.read_storage::<Animation>();
+        let game = self.specs_world.read_resource::<Game>();
 
         for (p, i) in (&positions, &images).join() {
             graphics::draw(
@@ -269,6 +271,20 @@ impl ggez::event::EventHandler for State {
                 graphics::DrawParam::default().dest(p.position),
             )
             .unwrap_or_else(|err| println!("draw error {:?}", err));
+        }
+
+        if !game.playing {
+            let height = self.text.height(ctx) as f32;
+            let width = self.text.width(ctx) as f32;
+            let x = (1024.0 / 2.0) - (width / 2.0);
+            let y = (600.0 / 2.0) - (height / 2.0);
+            graphics::queue_text(ctx, &self.text, nalgebra::Point2::new(x, y), None);
+            let _ = graphics::draw_queued_text(
+                ctx,
+                graphics::DrawParam::default(),
+                None,
+                graphics::FilterMode::Linear,
+            );
         }
 
         graphics::present(ctx)?;
@@ -410,7 +426,7 @@ fn main() {
 
     // The bird
     let bird_height = 72.0;
-    let bird_width = 61.0;
+    let bird_width = 58.0;
     world
         .create_entity()
         .with(Position {
@@ -435,12 +451,24 @@ fn main() {
     let update_animation = AnimationSystem;
     let collision_system = CollisionSystem;
 
+    let font = match graphics::Font::new(ctx, "/8bitOperatorPlus.ttf") {
+        Ok(f) => f,
+        Err(_) => graphics::Font::default(),
+    };
+    let text = graphics::Text::new(graphics::TextFragment {
+        text: "GAME OVER".to_string(),
+        color: Some(graphics::Color::new(1.0, 0.0, 0.0, 1.0)),
+        font: Some(font),
+        scale: Some(graphics::Scale::uniform(220.0)),
+    });
+
     let state = &mut State {
         specs_world: world,
         player_input,
         movement_system: update_pos,
         animation_system: update_animation,
         collision_system,
+        text,
     };
 
     event::run(ctx, event_loop, state).unwrap();
