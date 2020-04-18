@@ -10,11 +10,15 @@ const GRAVITY: f32 = 0.3;
 #[derive(Default)]
 pub struct Game {
     playing: bool,
+    score: i32,
 }
 
 impl Game {
     pub fn new() -> Self {
-        Game { playing: true }
+        Game {
+            playing: true,
+            score: 0,
+        }
     }
 }
 
@@ -25,6 +29,7 @@ struct State {
     animation_system: AnimationSystem,
     collision_system: CollisionSystem,
     text: graphics::Text,
+    score: graphics::Text,
 }
 
 #[derive(Component, Debug, PartialEq, Clone)]
@@ -230,10 +235,11 @@ impl<'a> System<'a> for CollisionSystem {
 
 impl ggez::event::EventHandler for State {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-        let game = self.specs_world.read_resource::<Game>();
+        let mut game = self.specs_world.write_resource::<Game>();
         if !game.playing {
             return Ok(());
         }
+        game.score += 1;
         drop(game);
 
         const ANIMATION_DESIRED_FPS: u32 = 15;
@@ -279,13 +285,18 @@ impl ggez::event::EventHandler for State {
             let x = (1024.0 / 2.0) - (width / 2.0);
             let y = (600.0 / 2.0) - (height / 2.0);
             graphics::queue_text(ctx, &self.text, nalgebra::Point2::new(x, y), None);
-            let _ = graphics::draw_queued_text(
-                ctx,
-                graphics::DrawParam::default(),
-                None,
-                graphics::FilterMode::Linear,
-            );
+        } else {
+            if game.score % 5 == 0 {
+                self.score.fragments_mut()[0].text = format!("Score: {}", game.score);
+            }
+            graphics::queue_text(ctx, &self.score, nalgebra::Point2::new(800.0, 10.0), None);
         }
+        let _ = graphics::draw_queued_text(
+            ctx,
+            graphics::DrawParam::default(),
+            None,
+            graphics::FilterMode::Linear,
+        );
 
         graphics::present(ctx)?;
 
@@ -461,6 +472,12 @@ fn main() {
         font: Some(font),
         scale: Some(graphics::Scale::uniform(220.0)),
     });
+    let score = graphics::Text::new(graphics::TextFragment {
+        text: "Score: 0".to_string(),
+        color: Some(graphics::Color::new(1.0, 1.0, 1.0, 1.0)),
+        font: Some(font),
+        scale: Some(graphics::Scale::uniform(30.0)),
+    });
 
     let state = &mut State {
         specs_world: world,
@@ -469,6 +486,7 @@ fn main() {
         animation_system: update_animation,
         collision_system,
         text,
+        score,
     };
 
     event::run(ctx, event_loop, state).unwrap();
