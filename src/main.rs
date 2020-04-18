@@ -1,5 +1,6 @@
 use ggez::event::{self, KeyCode, KeyMods};
 use ggez::*;
+use rand::Rng;
 use specs::*;
 use specs_derive::*;
 use std::path;
@@ -113,8 +114,10 @@ struct BackgroundTag {
 }
 
 #[derive(Component, Default)]
-#[storage(NullStorage)]
-struct ObstacleTag;
+#[storage(VecStorage)]
+struct ObstacleTag {
+    images: Vec<Image>,
+}
 
 struct MovementSystem;
 impl<'a> System<'a> for MovementSystem {
@@ -125,10 +128,12 @@ impl<'a> System<'a> for MovementSystem {
         ReadStorage<'a, BackgroundTag>,
         ReadStorage<'a, ObstacleTag>,
         WriteStorage<'a, CollisionBox>,
+        WriteStorage<'a, Image>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut dir, mut pos, anim, bg, obs, mut coll) = data;
+        let (mut dir, mut pos, anim, bg, obs, mut coll, mut img) = data;
+        let mut rng = rand::thread_rng();
 
         for (pos, _) in (&mut pos, &anim).join() {
             if dir.jump && dir.release {
@@ -159,11 +164,24 @@ impl<'a> System<'a> for MovementSystem {
             }
         }
 
-        for (pos, bg, _) in (&mut pos, &bg, &obs).join() {
+        for (pos, bg, obs, img) in (&mut pos, &bg, &obs, &mut img).join() {
             pos.position.x -= bg.velocity;
 
             if pos.position.x < (bg.width * -1.0) {
                 pos.position.x = 1024.0;
+
+                let choice = rng.gen_range(0, 3);
+                pos.position.y = match choice {
+                    0 => 240.0,
+                    1 => 360.0,
+                    2 => 480.0,
+                    _ => 600.0,
+                };
+                match choice {
+                    0 => *img = obs.images[0].clone(),
+                    1 => *img = obs.images[1].clone(),
+                    _ => *img = obs.images[2].clone(),
+                };
             }
         }
 
@@ -410,9 +428,12 @@ fn main() {
     }
 
     // Obstacle pipe
-    let pipe_img = Image::new(ctx, "/bottom_pipe.png");
-    for n in 0..2 {
-        let pos_x = (500.0 * n as f32) + 900.0;
+    let mut images = Vec::new();
+    images.push(Image::new(ctx, "/bottom_pipe_big.png"));
+    images.push(Image::new(ctx, "/bottom_pipe_mid.png"));
+    images.push(Image::new(ctx, "/bottom_pipe_small.png"));
+    for n in 0..3 {
+        let pos_x = (340.0 * n as f32) + 900.0;
         let pos_y = 360.0;
         world
             .create_entity()
@@ -420,13 +441,15 @@ fn main() {
                 position: nalgebra::Point2::new(pos_x, pos_y),
                 speed: nalgebra::Point2::new(0.0, 0.0),
             })
-            .with(pipe_img.clone())
+            .with(images[1].clone())
             .with(BackgroundTag {
                 velocity: 4.0,
                 width: 64.0,
                 num_copies: 1,
             })
-            .with(ObstacleTag)
+            .with(ObstacleTag {
+                images: images.clone(),
+            })
             .with(CollisionBox {
                 origin: nalgebra::Point2::new(pos_x, pos_y),
                 height: 240.0,
