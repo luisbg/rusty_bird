@@ -117,6 +117,7 @@ struct BackgroundTag {
 #[storage(VecStorage)]
 struct ObstacleTag {
     images: Vec<Image>,
+    top: bool,
 }
 
 struct MovementSystem;
@@ -128,11 +129,12 @@ impl<'a> System<'a> for MovementSystem {
         ReadStorage<'a, BackgroundTag>,
         ReadStorage<'a, ObstacleTag>,
         WriteStorage<'a, CollisionBox>,
-        WriteStorage<'a, Image>,
+        Entities<'a>,
+        Read<'a, LazyUpdate>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut dir, mut pos, anim, bg, obs, mut coll, mut img) = data;
+        let (mut dir, mut pos, anim, bg, obs, mut coll, entities, updater) = data;
         let mut rng = rand::thread_rng();
 
         for (pos, _) in (&mut pos, &anim).join() {
@@ -164,24 +166,109 @@ impl<'a> System<'a> for MovementSystem {
             }
         }
 
-        for (pos, bg, obs, img) in (&mut pos, &bg, &obs, &mut img).join() {
+        for (ent, pos, bg, obs) in (&*entities, &mut pos, &bg, &obs).join() {
             pos.position.x -= bg.velocity;
 
             if pos.position.x < (bg.width * -1.0) {
                 pos.position.x = 1024.0;
+                pos.position.y = 600.0;
+                let _ = entities.delete(ent);
 
                 let choice = rng.gen_range(0, 3);
-                pos.position.y = match choice {
-                    0 => 240.0,
-                    1 => 360.0,
-                    2 => 480.0,
-                    _ => 600.0,
-                };
-                match choice {
-                    0 => *img = obs.images[0].clone(),
-                    1 => *img = obs.images[1].clone(),
-                    _ => *img = obs.images[2].clone(),
-                };
+                if obs.top {
+                    let bottom_y;
+                    let bottom_img;
+                    match choice {
+                        0 => {
+                            pos.position.y = -240.0;
+                            bottom_y = 240.0;
+                            bottom_img = obs.images[0].clone();
+                        }
+                        1 => {
+                            pos.position.y = -120.0;
+                            bottom_y = 360.0;
+                            bottom_img = obs.images[1].clone();
+                        }
+                        2 => {
+                            pos.position.y = 0.0;
+                            bottom_y = 480.0;
+                            bottom_img = obs.images[2].clone();
+                        }
+                        _ => {
+                            pos.position.y = 600.0;
+                            bottom_y = 600.0;
+                            bottom_img = obs.images[0].clone();
+                        }
+                    };
+
+                    // Top obstacle
+                    let top_obs = entities.create();
+                    updater.insert(
+                        top_obs,
+                        Position {
+                            position: nalgebra::Point2::new(1024.0, pos.position.y),
+                            speed: nalgebra::Point2::new(0.0, 0.0),
+                        },
+                    );
+                    updater.insert(top_obs, obs.images[3].clone());
+                    updater.insert(
+                        top_obs,
+                        BackgroundTag {
+                            velocity: 4.0,
+                            width: 64.0,
+                            num_copies: 1,
+                        },
+                    );
+                    updater.insert(
+                        top_obs,
+                        ObstacleTag {
+                            images: obs.images.clone(),
+                            top: true,
+                        },
+                    );
+                    updater.insert(
+                        top_obs,
+                        CollisionBox {
+                            origin: nalgebra::Point2::new(1024.0, pos.position.y),
+                            height: 240.0,
+                            width: 64.0,
+                        },
+                    );
+
+                    // Bottom obstacle
+                    let bottom_obs = entities.create();
+                    updater.insert(
+                        bottom_obs,
+                        Position {
+                            position: nalgebra::Point2::new(1024.0, bottom_y),
+                            speed: nalgebra::Point2::new(0.0, 0.0),
+                        },
+                    );
+                    updater.insert(bottom_obs, bottom_img.clone());
+                    updater.insert(
+                        bottom_obs,
+                        BackgroundTag {
+                            velocity: 4.0,
+                            width: 64.0,
+                            num_copies: 1,
+                        },
+                    );
+                    updater.insert(
+                        bottom_obs,
+                        ObstacleTag {
+                            images: obs.images.clone(),
+                            top: false,
+                        },
+                    );
+                    updater.insert(
+                        bottom_obs,
+                        CollisionBox {
+                            origin: nalgebra::Point2::new(1024.0, bottom_y),
+                            height: 240.0,
+                            width: 64.0,
+                        },
+                    );
+                }
             }
         }
 
@@ -268,6 +355,8 @@ impl ggez::event::EventHandler for State {
 
         self.movement_system.run_now(&self.specs_world);
         self.collision_system.run_now(&self.specs_world);
+
+        self.specs_world.maintain();
 
         Ok(())
     }
@@ -427,11 +516,13 @@ fn main() {
             .build();
     }
 
-    // Obstacle pipe
+    // Obstacle pipes
     let mut images = Vec::new();
     images.push(Image::new(ctx, "/bottom_pipe_big.png"));
     images.push(Image::new(ctx, "/bottom_pipe_mid.png"));
     images.push(Image::new(ctx, "/bottom_pipe_small.png"));
+    images.push(Image::new(ctx, "/top_pipe.png"));
+    // Bottom
     for n in 0..3 {
         let pos_x = (340.0 * n as f32) + 900.0;
         let pos_y = 360.0;
@@ -449,6 +540,34 @@ fn main() {
             })
             .with(ObstacleTag {
                 images: images.clone(),
+                top: false,
+            })
+            .with(CollisionBox {
+                origin: nalgebra::Point2::new(pos_x, pos_y),
+                height: 240.0,
+                width: 64.0,
+            })
+            .build();
+    }
+    // Top
+    for n in 0..3 {
+        let pos_x = (340.0 * n as f32) + 900.0;
+        let pos_y = -120.0;
+        world
+            .create_entity()
+            .with(Position {
+                position: nalgebra::Point2::new(pos_x, pos_y),
+                speed: nalgebra::Point2::new(0.0, 0.0),
+            })
+            .with(images[3].clone())
+            .with(BackgroundTag {
+                velocity: 4.0,
+                width: 64.0,
+                num_copies: 1,
+            })
+            .with(ObstacleTag {
+                images: images.clone(),
+                top: true,
             })
             .with(CollisionBox {
                 origin: nalgebra::Point2::new(pos_x, pos_y),
