@@ -113,16 +113,10 @@ struct BackgroundTag {
     num_copies: u32,
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 #[storage(VecStorage)]
 struct ObstacleTag {
     images: Vec<Image>,
-    top: Image,
-    bottom: Image,
-    top_y: f32,
-    bottom_y: f32,
-    top_collision_box: CollisionBox,
-    bottom_collision_box: CollisionBox,
 }
 
 struct MovementSystem;
@@ -132,12 +126,13 @@ impl<'a> System<'a> for MovementSystem {
         WriteStorage<'a, Position>,
         ReadStorage<'a, Animation>,
         ReadStorage<'a, BackgroundTag>,
-        WriteStorage<'a, ObstacleTag>,
+        ReadStorage<'a, ObstacleTag>,
         WriteStorage<'a, CollisionBox>,
+        WriteStorage<'a, Image>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut dir, mut pos, anim, bg, mut obs, mut coll) = data;
+        let (mut dir, mut pos, anim, bg, obs, mut coll, mut img) = data;
         let mut rng = rand::thread_rng();
 
         for (pos, _) in (&mut pos, &anim).join() {
@@ -169,40 +164,29 @@ impl<'a> System<'a> for MovementSystem {
             }
         }
 
-        for (pos, bg, obs) in (&mut pos, &bg, &mut obs).join() {
+        for (pos, bg, obs, img) in (&mut pos, &bg, &obs, &mut img).join() {
             pos.position.x -= bg.velocity;
 
             if pos.position.x < (bg.width * -1.0) {
                 pos.position.x = 1024.0;
-                let mut pos_y = -600.0;
 
-                match rng.gen_range(0, 3) {
-                    0 => {
-                        pos_y = 240.0;
-                        obs.bottom = obs.images[0].clone();
-                    },
-                    1 => {
-                        pos_y = 360.0;
-                        obs.bottom = obs.images[1].clone();
-                    },
-                    2 => {
-                        pos_y = 480.0;
-                        obs.bottom = obs.images[2].clone();
-                    },
-                    _ => {},
+                let choice = rng.gen_range(0, 3);
+                pos.position.y = match choice {
+                    0 => 240.0,
+                    1 => 360.0,
+                    2 => 480.0,
+                    _ => 600.0,
                 };
-                obs.bottom_y = pos_y;
-                obs.bottom_collision_box.origin.y = obs.bottom_y;
-                obs.top_y = pos_y - 480.0;
-                obs.top_collision_box.origin.y = obs.top_y;
+                match choice {
+                    0 => *img = obs.images[0].clone(),
+                    1 => *img = obs.images[1].clone(),
+                    _ => *img = obs.images[2].clone(),
+                };
             }
-
-            obs.top_collision_box.origin.x = pos.position.x;
-            obs.bottom_collision_box.origin.x = pos.position.x;
         }
 
-        for (pos, coll_box, _) in (&mut pos, &mut coll, &anim).join() {
-            // update the collision box of the bird
+        for (pos, coll_box) in (&mut pos, &mut coll).join() {
+            // if an entity has an updated position, we also need to update it's collision box
             coll_box.origin.x = pos.position.x;
             coll_box.origin.y = pos.position.y;
         }
@@ -240,30 +224,21 @@ impl<'a> System<'a> for CollisionSystem {
         ReadStorage<'a, Position>,
         ReadStorage<'a, CollisionBox>,
         ReadStorage<'a, Animation>,
-        ReadStorage<'a, ObstacleTag>,
         Write<'a, Game>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (pos, coll_box, anim, obs, mut game) = data;
+        let (pos, coll_box, anim, mut game) = data;
 
         let mut collided = false;
         // Find the player collision box
         for (player_box, _) in (&coll_box, &anim).join() {
-            // Now check all obstacles
-            for (_, obs) in (&pos, &obs).join() {
-                if player_box.origin.x < obs.top_collision_box.origin.x + obs.top_collision_box.width
-                    && player_box.origin.x + player_box.width > obs.top_collision_box.origin.x
-                    && player_box.origin.y < obs.top_collision_box.origin.y + obs.top_collision_box.height
-                    && player_box.origin.y + player_box.height > obs.top_collision_box.origin.y
-                {
-                    collided = true;
-                }
-
-                if player_box.origin.x < obs.bottom_collision_box.origin.x + obs.bottom_collision_box.width
-                    && player_box.origin.x + player_box.width > obs.bottom_collision_box.origin.x
-                    && player_box.origin.y < obs.bottom_collision_box.origin.y + obs.bottom_collision_box.height
-                    && player_box.origin.y + player_box.height > obs.bottom_collision_box.origin.y
+            // Now check all entities with a collision box that aren't player controlled
+            for (_, coll_box, _) in (&pos, &coll_box, !&anim).join() {
+                if player_box.origin.x < coll_box.origin.x + coll_box.width
+                    && player_box.origin.x + player_box.width > coll_box.origin.x
+                    && player_box.origin.y < coll_box.origin.y + coll_box.height
+                    && player_box.origin.y + player_box.height > coll_box.origin.y
                 {
                     collided = true;
                 }
@@ -303,7 +278,6 @@ impl ggez::event::EventHandler for State {
         let images = self.specs_world.read_storage::<Image>();
         let animations = self.specs_world.read_storage::<Animation>();
         let game = self.specs_world.read_resource::<Game>();
-        let obstacles = self.specs_world.read_storage::<ObstacleTag>();
 
         for (p, i) in (&positions, &images).join() {
             graphics::draw(
@@ -319,22 +293,6 @@ impl ggez::event::EventHandler for State {
                 ctx,
                 &(*a).images[(*a).current_frame as usize].clone(),
                 graphics::DrawParam::default().dest(p.position),
-            )
-            .unwrap_or_else(|err| println!("draw error {:?}", err));
-        }
-
-        for (p, obs) in (&positions, &obstacles).join() {
-            graphics::draw(
-                ctx,
-                &*obs.top.image,
-                graphics::DrawParam::default().dest(nalgebra::Point2::new(p.position.x, obs.top_y)),
-            )
-            .unwrap_or_else(|err| println!("draw error {:?}", err));
-            graphics::draw(
-                ctx,
-                &*obs.bottom.image,
-                graphics::DrawParam::default()
-                    .dest(nalgebra::Point2::new(p.position.x, obs.bottom_y)),
             )
             .unwrap_or_else(|err| println!("draw error {:?}", err));
         }
@@ -427,7 +385,6 @@ fn main() {
     world.register::<BackgroundTag>();
     world.register::<ObstacleTag>();
     world.register::<CollisionBox>();
-    world.register::<ObstacleTag>();
 
     // Background
     let bg_copies = 3;
@@ -470,12 +427,11 @@ fn main() {
             .build();
     }
 
-    // Obstacle pipes
+    // Obstacle pipe
     let mut images = Vec::new();
     images.push(Image::new(ctx, "/bottom_pipe_big.png"));
     images.push(Image::new(ctx, "/bottom_pipe_mid.png"));
     images.push(Image::new(ctx, "/bottom_pipe_small.png"));
-    images.push(Image::new(ctx, "/top_pipe.png"));
     for n in 0..3 {
         let pos_x = (340.0 * n as f32) + 900.0;
         let pos_y = 360.0;
@@ -485,6 +441,7 @@ fn main() {
                 position: nalgebra::Point2::new(pos_x, pos_y),
                 speed: nalgebra::Point2::new(0.0, 0.0),
             })
+            .with(images[1].clone())
             .with(BackgroundTag {
                 velocity: 4.0,
                 width: 64.0,
@@ -492,20 +449,11 @@ fn main() {
             })
             .with(ObstacleTag {
                 images: images.clone(),
-                top: images[3].clone(),
-                bottom: images[1].clone(),
-                top_y: -120.0,
-                bottom_y: pos_y,
-                top_collision_box: CollisionBox {
-                    origin: nalgebra::Point2::new(pos_x, -120.0),
-                    height: 240.0,
-                    width: 64.0,
-                },
-                bottom_collision_box: CollisionBox {
-                    origin: nalgebra::Point2::new(pos_x, pos_y),
-                    height: 240.0,
-                    width: 64.0,
-                },
+            })
+            .with(CollisionBox {
+                origin: nalgebra::Point2::new(pos_x, pos_y),
+                height: 240.0,
+                width: 64.0,
             })
             .build();
     }
